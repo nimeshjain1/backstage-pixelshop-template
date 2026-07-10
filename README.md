@@ -39,3 +39,4 @@ Spend Detective is built to catch.
 ## Where to add your logic
 
 Replace `_expensive_operation()` in `app/main.py`. Keep the metering calls.
+
