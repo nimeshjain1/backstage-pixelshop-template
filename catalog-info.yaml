@@ -1,0 +1,34 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.serviceName }}
+  description: ${{ values.description }}
+  annotations:
+    github.com/project-slug: ${{ values.destination.owner + "/" + values.destination.repo }}
+    backstage.io/techdocs-ref: dir:.
+    prometheus.io/service-name: ${{ values.serviceName }}
+    spend-detective/cost-driver: ${{ values.primaryCostDriver }}
+    spend-detective/monitored: 'true'
+  tags:
+    - python
+    - fastapi
+    - pixelshop
+    - ${{ values.tier }}
+  links:
+    - url: http://localhost:3000/catalog/default/component/${{ values.serviceName }}/cost
+      title: Cost health
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: experimental
+  owner: ${{ values.owner }}
+  system: pixelshop
+{%- if values.usesDatabase or values.usesCache %}
+  dependsOn:
+  {%- if values.usesDatabase %}
+    - resource:default/pixelshop-postgres
+  {%- endif %}
+  {%- if values.usesCache %}
+    - resource:default/pixelshop-redis
+  {%- endif %}
+{%- endif %}

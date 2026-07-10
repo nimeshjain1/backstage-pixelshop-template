@@ -1,0 +1,147 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: pixelshop-python-service
+  title: PixelShop Python Service
+  description: >
+    Scaffolds a small Python (FastAPI) microservice, pre-wired with Prometheus
+    cost metering, health endpoints, a Dockerfile, CI, and catalog registration.
+    Used to create the PixelShop demo services monitored by Spend Detective.
+  tags:
+    - python
+    - fastapi
+    - microservice
+    - pixelshop
+spec:
+  owner: group:default/platform-team
+  type: service
+
+  parameters:
+    - title: Service identity
+      required:
+        - serviceName
+        - description
+        - owner
+      properties:
+        serviceName:
+          title: Service name
+          type: string
+          description: Lowercase, hyphenated. Becomes the repo name and catalog entity name.
+          pattern: '^svc-[a-z0-9-]+$'
+          ui:autofocus: true
+          ui:help: 'Must start with "svc-", e.g. svc-images'
+        description:
+          title: Description
+          type: string
+          description: One line describing what this service does.
+          ui:help: 'e.g. Resizes uploaded photos and generates thumbnails'
+        owner:
+          title: Owner
+          type: string
+          description: Team that owns this service.
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind:
+                - Group
+                - User
+        tier:
+          title: Service tier
+          type: string
+          description: Criticality. Spend Detective uses this to rank anomalies by blast radius.
+          default: tier-2
+          enum:
+            - tier-1
+            - tier-2
+            - tier-3
+          enumNames:
+            - 'Tier 1 - customer-facing critical'
+            - 'Tier 2 - customer-facing non-critical'
+            - 'Tier 3 - internal / background'
+
+    - title: Cost profile
+      required:
+        - primaryCostDriver
+      properties:
+        primaryCostDriver:
+          title: Primary cost driver
+          type: string
+          description: >
+            What this service mainly spends money on. Determines which metrics
+            the billing exporter meters for it.
+          enum:
+            - cpu
+            - database
+            - storage
+            - third_party_api
+          enumNames:
+            - 'CPU time (compute-heavy work)'
+            - 'Database queries'
+            - 'Object storage (GB held)'
+            - 'Third-party API calls (per-call fee)'
+        usesCache:
+          title: Uses Redis cache
+          type: boolean
+          default: false
+          description: Adds a Redis client and a CACHE_ENABLED toggle.
+        usesDatabase:
+          title: Uses Postgres
+          type: boolean
+          default: false
+          description: Adds a Postgres client and connection config.
+
+    - title: Repository
+      required:
+        - repoUrl
+      properties:
+        repoUrl:
+          title: Repository location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+
+  steps:
+    - id: fetch
+      name: Fetch skeleton and apply parameters
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          serviceName: ${{ parameters.serviceName }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          tier: ${{ parameters.tier }}
+          primaryCostDriver: ${{ parameters.primaryCostDriver }}
+          usesCache: ${{ parameters.usesCache }}
+          usesDatabase: ${{ parameters.usesDatabase }}
+          repoUrl: ${{ parameters.repoUrl }}
+          destination: ${{ parameters.repoUrl | parseRepoUrl }}
+
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        description: ${{ parameters.description }}
+        defaultBranch: main
+        repoVisibility: private
+        topics:
+          - pixelshop
+          - spend-detective
+
+    - id: register
+      name: Register in catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
